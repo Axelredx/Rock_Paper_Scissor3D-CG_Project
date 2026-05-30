@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport: disabilita lo zoom nativo del browser su mobile -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Evita l'errore 404 per favicon.ico: usa un'icona SVG inline vuota -->
+  <link rel="icon" href="data:,">
+  <title>Rock Paper Scissors 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+
+    /* Canvas WebGL: occupa tutta la finestra */
+    #canvas { width: 100vw; height: 100vh; display: block; }
+
+    /* Canvas HUD 2D: sovrapposto al canvas WebGL per disegnare il titolo.
+       pointer-events: none lo rende trasparente ai clic. */
+    #hud {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+
+    /* dat.GUI deve stare sopra gli altri elementi */
+    .dg.ac { z-index: 10 !important; }
+
+    /* Tasti del gioco RPS */
+    .rps-btn {
+      font: bold 15px monospace;
+      padding: 12px 24px;
+      border: 2px solid rgba(255,255,255,0.5);
+      border-radius: 10px;
+      background: #000;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    /* Tasti d-pad mobile */
+    .mob-btn {
+      width: 44px; height: 44px;
+      font: bold 16px monospace;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      cursor: pointer;
+      touch-action: none;               /* evita scroll accidentale al tocco */
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Q/E leggermente più larghi per il testo */
+    #btn-q, #btn-e { width: 54px; }
+  </style>
+</head>
+<body>
+
+  <!-- Canvas principale WebGL -->
+  <canvas id="canvas"></canvas>
+
+  <!-- Canvas HUD: usato solo per disegnare il titolo in 2D sopra la scena 3D -->
+  <canvas id="hud"></canvas>
+
+  <!-- Risultato partita RPS: appare in alto sotto il titolo per 2 secondi -->
+  <div id="rps-result" style="
+    display: none;
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    font: bold 15px monospace;
+    background: #000;
+    padding: 8px 22px;
+    border-radius: 8px;
+    text-align: center;
+    z-index: 20;
+    pointer-events: none;
+  "></div>
+
+  <!-- Controlli movimento mobile: visibili solo se larghezza <= 768px.
+       Il d-pad replica i tasti WASD + Q/E della tastiera. -->
+  <div id="mobile-controls" style="
+    display: none;
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 19;
+    pointer-events: auto;
+    user-select: none;
+  ">
+    <!-- Q/E: spostano la camera su e giù lungo l'asse Y -->
+    <div style="display:flex; gap:6px; margin-bottom:2px;">
+      <button class="mob-btn" id="btn-q">Q ↑</button>
+      <button class="mob-btn" id="btn-e">E ↓</button>
+    </div>
+    <!-- D-pad: frecce per W/A/S/D (pan della camera nel piano XZ) -->
+    <div style="display:grid;
+                grid-template-columns: repeat(3, 44px);
+                grid-template-rows:    repeat(3, 44px);
+                gap: 4px;">
+      <div></div>
+      <button class="mob-btn" id="btn-w">▲</button>
+      <div></div>
+      <button class="mob-btn" id="btn-a">◀</button>
+      <div></div>
+      <button class="mob-btn" id="btn-d">▶</button>
+      <div></div>
+      <button class="mob-btn" id="btn-s">▼</button>
+      <div></div>
+    </div>
+  </div>
+
+  <!-- Pannello tasti Sasso Carta Forbici: mostrato/nascosto dalla GUI -->
+  <div id="rps-panel" style="
+    display: none;
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    z-index: 20;
+    pointer-events: auto;
+  ">
+    <button class="rps-btn" onclick="playRPS('sasso')">✊ Sasso</button>
+    <button class="rps-btn" onclick="playRPS('carta')">✋ Carta</button>
+    <button class="rps-btn" onclick="playRPS('forbici')">✌️ Forbici</button>
+  </div>
+
+  <!-- =====================================================
+       LIBRERIE ESTERNE DEL CORSO
+       ===================================================== -->
+  <script src="lib/webgl-utils.js"></script> <!-- utility WebGL (compilazione shader) -->
+  <script src="lib/m4.js"></script>           <!-- matematica 3D (matrici, vettori) -->
+  <script src="lib/glm_utils.js"></script>    <!-- parser OBJ/MTL -->
+  <script src="lib/mesh_utils.js"></script>   <!-- strutture dati mesh (subd_mesh) -->
+  <script src="lib/dat.gui.js"></script>      <!-- pannello GUI interattivo -->
+
+  <!-- =====================================================
+       MODULI APPLICAZIONE (in resources/utils/)
+       Ordine importante: globals prima di tutto,
+       poi le dipendenze, poi main.js per ultimo.
+       ===================================================== -->
+  <script src="resources/utils/globals.js"></script>  <!-- variabili globali condivise -->
+  <script src="resources/utils/shaders.js"></script>  <!-- sorgenti GLSL -->
+  <script src="resources/utils/texture.js"></script>  <!-- caricamento texture -->
+  <script src="resources/utils/room.js"></script>     <!-- geometria e rendering stanza -->
+  <script src="resources/utils/mesh.js"></script>     <!-- caricamento OBJ e drawOBJ -->
+  <script src="resources/utils/scene.js"></script>    <!-- oggetti scena e animazioni -->
+  <script src="resources/utils/shadow.js"></script>   <!-- shadow map e depth pass -->
+  <script src="resources/utils/input.js"></script>    <!-- tastiera, mouse, touch -->
+  <script src="resources/utils/gui.js"></script>      <!-- pannello dat.GUI -->
+  <script src="resources/utils/hud.js"></script>      <!-- titolo HUD 2D -->
+  <script src="resources/utils/game.js"></script>     <!-- logica RPS e controlli mobile -->
+
+  <!-- Entry point: init() e loop() -->
+  <script src="main.js"></script>
+
+</body>
+</html>
