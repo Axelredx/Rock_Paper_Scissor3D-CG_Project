@@ -26,7 +26,7 @@
 
 ## 1. Project Idea
 
-The project consists of an interactive 3D game based on the classic "Rock Paper Scissors" game, with the main focus placed on the implemented 3D scene.
+The project consists of an interactive 3D game based on the classic "Rock Paper Scissors" game, with the main focus placed on the implemented 3D scene, developed using WebGL.
 
 ![Screenshot of the 3D scene — Desktop](doc-img/desktop.png)
 
